@@ -1,5 +1,6 @@
 # Checks the street layout without a headset: run with  godot --headless -s res://tests/street_logic.gd
-# The same seed must give the same street, lots must not overlap, and houses must sit inside their lots, clear of the footpath.
+# The same seed must give the same street, lots must not overlap, houses must sit inside their lots, set back from the footpath,
+# and every driveway must stay clear of the house (or lead straight to its garage).
 extends SceneTree
 
 const StreetScript := preload("res://scripts/street.gd")
@@ -8,29 +9,37 @@ var failures := 0
 
 
 func _init() -> void:
-	var a: Dictionary = StreetScript.layout(1)
-	var b: Dictionary = StreetScript.layout(1)
-	var c: Dictionary = StreetScript.layout(2)
+	var variants: Array = StreetScript.load_variants()
+	check(variants.size() >= 6, "the house variants were loaded (%d)" % variants.size())
+	for v: Dictionary in variants:
+		check(ResourceLoader.exists("res://assets/houses/" + String(v.file)), "house %s exists" % v.file)
+	var a: Dictionary = StreetScript.layout(1, variants)
+	var b: Dictionary = StreetScript.layout(1, variants)
+	var c: Dictionary = StreetScript.layout(2, variants)
 	check(var_to_str(a) == var_to_str(b), "same seed gives the same street")
 	check(var_to_str(a) != var_to_str(c), "a different seed gives a different street")
+	var front: float = StreetScript.ROAD_HALF + StreetScript.PATH_WIDTH
 	for street: Dictionary in [a, c]:
 		check(street.lots.size() >= 8, "seed %d has at least 8 lots (got %d)" % [street.seed, street.lots.size()])
 		check(street.lamps.size() >= 3, "seed %d has street lamps" % street.seed)
-		var front: float = StreetScript.ROAD_HALF + StreetScript.PATH_WIDTH
 		for lot: Dictionary in street.lots:
+			var variant: Dictionary = variants[int(lot.variant)]
 			var house: Dictionary = lot.house
-			var center: Vector3 = house.center
-			var size: Vector3 = house.size
 			var x0: float = lot.x0
 			var x1: float = lot.x1
-			check(center.x - size.x * 0.5 >= x0 and center.x + size.x * 0.5 <= x1, "house fits its lot along the street (%.1f..%.1f)" % [x0, x1])
-			check(absf(center.z) - size.z * 0.5 > front + 3.0, "house is set back from the footpath")
-			check(absf(center.z) + size.z * 0.5 < front + StreetScript.LOT_DEPTH, "house is in front of the back fence")
+			check(float(house.x_min) >= x0 + 2.0 and float(house.x_max) <= x1 - 2.0, "house fits its lot (%.1f..%.1f in %.1f..%.1f)" % [house.x_min, house.x_max, x0, x1])
+			var wall_front := absf(float(house.z))
+			check(wall_front + float(variant.front_y) > front + 3.0, "house (and porch) set back from the footpath")
+			check(wall_front + float(variant.back_y) < front + StreetScript.LOT_DEPTH - 2.0, "house is in front of the back fence")
 			var drive: Dictionary = lot.driveway
-			var drive_x: float = drive.x
-			var drive_w: float = drive.width
-			var apart := absf(drive_x - center.x) >= (drive_w + size.x) * 0.5
-			check(apart, "driveway runs beside the house, not through it")
+			var d0: float = float(drive.x) - float(drive.width) * 0.5
+			var d1: float = float(drive.x) + float(drive.width) * 0.5
+			check(d0 >= x0 and d1 <= x1, "driveway is inside the lot")
+			if variant.garage == null:
+				var clear: bool = d0 >= float(house.x_max) or d1 <= float(house.x_min)
+				check(clear, "driveway runs beside the house, not through it")
+			else:
+				check(is_equal_approx(float(drive.length), wall_front - front + float(variant.garage.front_y)), "driveway reaches the garage door")
 		for side in [-1, 1]:
 			var last := -INF
 			for lot: Dictionary in street.lots:

@@ -45,3 +45,6 @@ texture={
 "compress/mode": 2,
 "mipmaps/generate": true
 }
+scene={
+"meshes/generate_lods": false
+}

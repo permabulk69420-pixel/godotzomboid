@@ -1,0 +1,79 @@
+{
+ "asphalt": {
+  "size_m": [
+   3.0,
+   3.0
+  ],
+  "source": "https://polyhaven.com/a/asphalt_02"
+ },
+ "brick": {
+  "size_m": [
+   1.0,
+   1.0
+  ],
+  "source": "https://polyhaven.com/a/red_brick_03"
+ },
+ "driveway": {
+  "size_m": [
+   2.0,
+   2.0
+  ],
+  "source": "https://polyhaven.com/a/concrete_floor_01"
+ },
+ "footpath": {
+  "size_m": [
+   1.8,
+   1.8
+  ],
+  "source": "https://polyhaven.com/a/concrete_pavement"
+ },
+ "lawn": {
+  "size_m": [
+   2.0,
+   2.0
+  ],
+  "source": "https://polyhaven.com/a/leafy_grass"
+ },
+ "plaster": {
+  "size_m": [
+   2.0,
+   2.0
+  ],
+  "source": "https://polyhaven.com/a/painted_plaster_wall"
+ },
+ "shingles": {
+  "size_m": [
+   8.0,
+   8.0
+  ],
+  "source": "https://polyhaven.com/a/grey_roof_01"
+ },
+ "siding": {
+  "size_m": [
+   1.8,
+   1.8
+  ],
+  "source": "https://polyhaven.com/a/white_planks_clean"
+ },
+ "stucco": {
+  "size_m": [
+   1.8,
+   1.8
+  ],
+  "source": "https://polyhaven.com/a/white_stucco_02"
+ },
+ "tiles": {
+  "size_m": [
+   3.0,
+   3.0
+  ],
+  "source": "https://polyhaven.com/a/floor_tiles_06"
+ },
+ "wood_floor": {
+  "size_m": [
+   1.7,
+   1.7
+  ],
+  "source": "https://polyhaven.com/a/laminate_floor_02"
+ }
+}

@@ -1,4 +1,4 @@
-# The test street: you stand at one end of a generated suburban street at golden hour and can walk around it.
+# The test street: you stand at one end of a generated suburban street at golden hour and can walk around it, and into any house.
 # In a headset (OpenXR, Quest) the left stick walks and the right stick turns; click both sticks to show the performance overlay.
 # On a flat screen the camera stands where you would: WASD walks, Q/E or the arrow keys turn.
 extends Node3D
@@ -10,10 +10,12 @@ const TURN_SPEED := deg_to_rad(110.0)
 const STICK_DEADZONE := 0.2
 const BODY_RADIUS := 0.28           # your body, for bumping into houses, fences and bins
 const BODY_HEIGHT := 1.6
-const BODY_LIFT := 0.2              # it floats this far off the ground, so kerbs do not stop you
+const BODY_LIFT := 0.3              # it floats this far off the floor, so kerbs, steps and porches do not stop you
+const STEP_REACH := 0.45            # how far above your feet the floor is looked for (just over a step)
+const STEP_DROP := 0.8              # and how far below
 const EYE_HEIGHT := 1.62            # flat-screen camera height
 const STREET_SEED := 1
-const START := Vector3(-44.0, 0.0, 1.5)    # the west end of the street, on the road, facing east along it
+const START := Vector3(-70.0, 0.0, 1.5)    # the west end of the street, on the road, facing east along it
 
 var vr := false
 var rig: Node3D
@@ -131,6 +133,19 @@ func locomote(move: Vector2, turn: float, dt: float) -> void:
 		right.y = 0.0
 		var heading := (forward.normalized() * move.y + right.normalized() * move.x) if forward.length() > 0.01 else Vector3.ZERO
 		rig.global_position += _slide(heading * MOVE_SPEED * dt)
+	_follow_ground(dt)
+
+
+# Your height follows whatever floor is under your head: the road, footpaths, porches and house floors (the walkable layer).
+func _follow_ground(dt: float) -> void:
+	var from := Vector3(camera.global_position.x, rig.global_position.y + STEP_REACH, camera.global_position.z)
+	var query := PhysicsRayQueryParameters3D.create(from, from + Vector3(0.0, -(STEP_REACH + STEP_DROP), 0.0), Street.WALK_LAYER)
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return
+	var ground: float = hit.position.y
+	if absf(ground - rig.global_position.y) > 0.0005:
+		rig.global_position.y = lerpf(rig.global_position.y, ground, 1.0 - exp(-14.0 * dt))
 
 
 # Moves your body through the street's solid things and returns how far it really got, sliding along walls instead of sticking.

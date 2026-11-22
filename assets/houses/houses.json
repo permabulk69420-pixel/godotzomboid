@@ -1,0 +1,164 @@
+{
+ "variants": [
+  {
+   "id": 0,
+   "file": "house_0.glb",
+   "width": 13.33,
+   "depth": 11.34,
+   "min_x": -7.115,
+   "max_x": 13.315,
+   "front_y": -1.9,
+   "back_y": 11.79,
+   "door_x": -1.383,
+   "garage": {
+    "door_x": 9.765,
+    "door_width": 4.9,
+    "front_y": 0.6
+   },
+   "porch": true,
+   "ridge": "x",
+   "height": 5.522,
+   "mirrored": false,
+   "triangles": 18144
+  },
+  {
+   "id": 1,
+   "file": "house_1.glb",
+   "width": 13.39,
+   "depth": 10.12,
+   "min_x": -13.345,
+   "max_x": 7.145,
+   "front_y": -0.6,
+   "back_y": 10.57,
+   "door_x": 1.005,
+   "garage": {
+    "door_x": -9.795,
+    "door_width": 4.9,
+    "front_y": 0.0
+   },
+   "porch": false,
+   "ridge": "x",
+   "height": 5.247,
+   "mirrored": true,
+   "triangles": 16888
+  },
+  {
+   "id": 2,
+   "file": "house_2.glb",
+   "width": 12.56,
+   "depth": 10.84,
+   "min_x": -6.73,
+   "max_x": 12.93,
+   "front_y": -1.9,
+   "back_y": 11.29,
+   "door_x": -1.176,
+   "garage": {
+    "door_x": 9.38,
+    "door_width": 4.9,
+    "front_y": 0.6
+   },
+   "porch": true,
+   "ridge": "y",
+   "height": 5.796,
+   "mirrored": false,
+   "triangles": 17284
+  },
+  {
+   "id": 3,
+   "file": "house_3.glb",
+   "width": 12.49,
+   "depth": 10.72,
+   "min_x": -6.695,
+   "max_x": 6.695,
+   "front_y": -0.6,
+   "back_y": 11.17,
+   "door_x": 0.888,
+   "garage": null,
+   "porch": false,
+   "ridge": "x",
+   "height": 5.382,
+   "mirrored": true,
+   "triangles": 15812
+  },
+  {
+   "id": 4,
+   "file": "house_4.glb",
+   "width": 12.26,
+   "depth": 11.95,
+   "min_x": -6.58,
+   "max_x": 12.78,
+   "front_y": -1.9,
+   "back_y": 12.4,
+   "door_x": -0.576,
+   "garage": {
+    "door_x": 9.23,
+    "door_width": 4.9,
+    "front_y": 1.2
+   },
+   "porch": true,
+   "ridge": "x",
+   "height": 5.659,
+   "mirrored": false,
+   "triangles": 17736
+  },
+  {
+   "id": 5,
+   "file": "house_5.glb",
+   "width": 12.45,
+   "depth": 11.8,
+   "min_x": -12.875,
+   "max_x": 6.675,
+   "front_y": -1.9,
+   "back_y": 12.25,
+   "door_x": 0.524,
+   "garage": {
+    "door_x": -9.325,
+    "door_width": 4.9,
+    "front_y": 1.2
+   },
+   "porch": true,
+   "ridge": "y",
+   "height": 5.771,
+   "mirrored": true,
+   "triangles": 17564
+  },
+  {
+   "id": 6,
+   "file": "house_6.glb",
+   "width": 12.04,
+   "depth": 10.46,
+   "min_x": -6.47,
+   "max_x": 12.67,
+   "front_y": -1.9,
+   "back_y": 10.91,
+   "door_x": -0.275,
+   "garage": {
+    "door_x": 9.12,
+    "door_width": 4.9,
+    "front_y": 0.6
+   },
+   "porch": true,
+   "ridge": "x",
+   "height": 5.324,
+   "mirrored": false,
+   "triangles": 16302
+  },
+  {
+   "id": 7,
+   "file": "house_7.glb",
+   "width": 13.57,
+   "depth": 11.6,
+   "min_x": -7.235,
+   "max_x": 7.235,
+   "front_y": -1.9,
+   "back_y": 12.05,
+   "door_x": 1.075,
+   "garage": null,
+   "porch": true,
+   "ridge": "x",
+   "height": 5.58,
+   "mirrored": true,
+   "triangles": 17432
+  }
+ ]
+}

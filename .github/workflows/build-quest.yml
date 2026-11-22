@@ -66,11 +66,18 @@ jobs:
 
       - name: Check the game logic
         run: |
-          godot --headless --import || true
+          godot --headless --import 2>&1 | tee import.log || true
+          if grep -E "SCRIPT ERROR|Parse Error" import.log; then exit 1; fi
           for t in tests/*.gd; do
             echo "== $t"
-            godot --headless -s "res://$t"
+            godot --headless -s "res://$t" 2>&1 | tee test.log
+            test ${PIPESTATUS[0]} -eq 0
+            if grep -E "SCRIPT ERROR|Parse Error" test.log; then exit 1; fi
           done
+          echo "== main scene, a few seconds with no headset"
+          godot --headless --quit-after 300 2>&1 | tee run.log || true
+          grep -q "Godot Zomboid ready" run.log
+          if grep -E "SCRIPT ERROR|Parse Error" run.log; then exit 1; fi
 
       - name: OpenXR Vendors plugin (the Meta Quest loader)
         run: |
