@@ -173,10 +173,10 @@ func _skip_space_warp_frame() -> void:
 # Golden hour: a low warm sun, a soft sky, and a warm haze that swallows the far end of the street.
 func _build_environment() -> void:
 	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color(0.33, 0.46, 0.66)
-	sky_material.sky_horizon_color = Color(0.93, 0.72, 0.52)
-	sky_material.ground_horizon_color = Color(0.62, 0.52, 0.42)
-	sky_material.ground_bottom_color = Color(0.22, 0.20, 0.18)
+	sky_material.sky_top_color = Color(0.30, 0.47, 0.72)
+	sky_material.sky_horizon_color = Color(0.86, 0.78, 0.68)
+	sky_material.ground_horizon_color = Color(0.60, 0.56, 0.50)
+	sky_material.ground_bottom_color = Color(0.30, 0.28, 0.25)
 	sky_material.sun_angle_max = 20.0
 	var sky := Sky.new()
 	sky.sky_material = sky_material
@@ -184,14 +184,20 @@ func _build_environment() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
+	# ambient light: half from the sky, half a neutral warm grey. Pure sky light tints surfaces by which way they face (floors blue
+	# from the sky above, ceilings brown from the ground below), which looked wrong indoors.
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.7
+	env.ambient_light_sky_contribution = 0.5
+	env.ambient_light_color = Color(0.78, 0.76, 0.72)
+	env.ambient_light_energy = 1.0
+	# no sky reflections: indoors they turned every floor blue (nothing tells the renderer the sky is hidden), and they cost on the Quest
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 1.0
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.86, 0.70, 0.54)
-	env.fog_density = 0.012
-	env.fog_sky_affect = 0.3
+	env.fog_light_color = Color(0.82, 0.76, 0.68)
+	env.fog_density = 0.0055
+	env.fog_sky_affect = 0.1
 	var world := WorldEnvironment.new()
 	world.name = "Environment"
 	world.environment = env
@@ -199,7 +205,7 @@ func _build_environment() -> void:
 
 	var sun := DirectionalLight3D.new()
 	sun.name = "Sun"
-	sun.light_color = Color(1.0, 0.80, 0.58)
+	sun.light_color = Color(1.0, 0.86, 0.70)
 	sun.light_energy = 1.3
 	sun.rotation_degrees = Vector3(-14.0, -120.0, 0.0)   # low in the sky, behind you and to the side as you look down the street
 	sun.shadow_enabled = true

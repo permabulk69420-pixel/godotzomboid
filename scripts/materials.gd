@@ -8,7 +8,7 @@ class_name Materials
 extends RefCounted
 
 const ROOT := "res://assets/materials/"
-const TILE_OVERRIDE := {"siding": 2.6}    # the siding photo's boards are a bit thin at its own scale; this gives ~12 cm boards
+const TILE_OVERRIDE := {"siding": 2.6, "lawn": 3.5}   # siding: ~12 cm boards; lawn: larger so the repeat is less obvious
 
 static var _info: Dictionary = {}
 static var _cache: Dictionary = {}

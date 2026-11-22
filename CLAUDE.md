@@ -16,8 +16,14 @@ consistency, not raw polygon counts. A locked frame rate counts as part of looki
   Blender (`pip install bpy`, Cycles on CPU) into **vertex colours** (near AO x sky visibility), which every material multiplies in.
   Surfaces are gridded (~0.35 m) so the shading has vertices to live on. Check results by rendering previews in Blender
   (`--preview` writes /tmp/house_<n>.png) and reading the images.
-- Godot binaries can't be downloaded in Claude's workspace (GitHub release assets are blocked), so Godot only runs in CI.
-  Check results with `gh run list` / `gh run view --log-failed`.
+- **Claude can run Godot in its own workspace.** Install: download
+  `https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip`, unzip to
+  `/usr/local/bin/godot`, then `godot --headless --import`. Run tests locally before pushing. Run the game and take screenshots with
+  software OpenGL (Mesa + Xvfb are installed):
+  `xvfb-run -a -s "-screen 0 1280x720x24" godot --rendering-driver opengl3 -s res://tools/screenshots.gd` → `shots/*.png`
+  (gitignored). Look at the pictures before saying something looks right. CI still builds the APK; check it with
+  `gh run list` / `gh run view --log-failed`.
+- If something can't be done, stop and tell Kane. Don't quietly switch to a different approach.
 - Scenes are built in code (like Kane's other Quest projects); `scenes/main.tscn` only holds `scripts/main.gd`.
 - Logic tests live in `tests/*.gd` and run in CI before the export (`godot --headless -s res://tests/<name>.gd`, exit code 1 on failure).
 - No README files.

@@ -571,7 +571,7 @@ def to_object(part):
 
 
 def bake_shading(objs, ground):
-    """Bakes near AO and sky visibility into colour attributes and combines them into one: Col = near * (0.35 + 0.65 * sky)."""
+    """Bakes near AO and sky visibility into colour attributes and combines them into one: Col = near^0.7 * (0.5 + 0.5 * sky)."""
     scene = bpy.context.scene
     for o in objs:
         for name in ("near", "sky", "Col"):
@@ -597,7 +597,7 @@ def bake_shading(objs, ground):
         for i in range(len(col)):
             n = near[i].color[0]
             s = sky[i].color[0]
-            v = n * (0.35 + 0.65 * s)
+            v = (n ** 0.7) * (0.5 + 0.5 * s)
             col[i].color = (v, v, v, 1.0)
         o.data.color_attributes.remove(o.data.color_attributes["near"])
         o.data.color_attributes.remove(o.data.color_attributes["sky"])

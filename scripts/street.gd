@@ -151,10 +151,10 @@ func build(street: Dictionary) -> void:
 		var kerb_out := ROAD_HALF + 0.15
 		_flat("kerb", -half, half, minf(s * ROAD_HALF, s * kerb_out), maxf(s * ROAD_HALF, s * kerb_out), KERB_HEIGHT)
 		_side_face("kerb", -half, half, s * ROAD_HALF, 0.0, KERB_HEIGHT, -s)
-		_flat("lawn", -half, half, minf(s * kerb_out, s * (ROAD_HALF + VERGE)), maxf(s * kerb_out, s * (ROAD_HALF + VERGE)), KERB_HEIGHT)
+		_lawn(-half, half, minf(s * kerb_out, s * (ROAD_HALF + VERGE)), maxf(s * kerb_out, s * (ROAD_HALF + VERGE)), KERB_HEIGHT)
 		_flat("footpath", -half, half, minf(s * (ROAD_HALF + VERGE), s * front), maxf(s * (ROAD_HALF + VERGE), s * front), KERB_HEIGHT)
-		# the lawns behind the footpath: one big sheet each side (driveways sit just above it)
-		_flat("lawn", -half, half, minf(s * front, s * (far + 40.0)), maxf(s * front, s * (far + 40.0)), 0.0)
+		# the lawns behind the footpath: one big sheet each side (driveways sit just above it), with patchy colour so the tiling hides
+		_lawn(-half, half, minf(s * front, s * (far + 40.0)), maxf(s * front, s * (far + 40.0)))
 		_side_face("footpath", -half, half, s * front, 0.0, KERB_HEIGHT, s)
 		_walk_box(Vector3(0.0, KERB_HEIGHT * 0.5 - 0.25, s * (ROAD_HALF + PATH_WIDTH * 0.5)), Vector3(half * 2.0, KERB_HEIGHT + 0.5, PATH_WIDTH))
 	_walk_box(Vector3(0.0, -0.25, 0.0), Vector3(half * 2.0, 0.5, (far + 40.0) * 2.0))
@@ -298,6 +298,44 @@ func _flat(kind: String, x0: float, x1: float, z0: float, z1: float, y: float) -
 	var c := [Vector3(x0, y, z0), Vector3(x1, y, z0), Vector3(x1, y, z1), Vector3(x0, y, z1)]
 	# wound so the face points up (Godot's front faces are clockwise seen from the front)
 	_quad(kind, [c[0], c[1], c[2], c[3]], Vector3.UP, [Vector2(x0, z0), Vector2(x1, z0), Vector2(x1, z1), Vector2(x0, z1)])
+
+
+# Lawn, split into a grid whose corners get slowly varying colours (greener, drier, darker patches), which breaks up the repeating
+# grass texture far better than a bigger texture would.
+var _lawn_noise: FastNoiseLite
+
+
+func _lawn(x0: float, x1: float, z0: float, z1: float, y: float = 0.0) -> void:
+	if _lawn_noise == null:
+		_lawn_noise = FastNoiseLite.new()
+		_lawn_noise.seed = seed_value
+		_lawn_noise.frequency = 0.045
+		_lawn_noise.fractal_octaves = 3
+	const CELL := 4.0
+	var nx := int(ceil((x1 - x0) / CELL))
+	var nz := int(ceil((z1 - z0) / CELL))
+	for i in nx:
+		for j in nz:
+			var ax := x0 + (x1 - x0) * i / nx
+			var bx := x0 + (x1 - x0) * (i + 1) / nx
+			var az := z0 + (z1 - z0) * j / nz
+			var bz := z0 + (z1 - z0) * (j + 1) / nz
+			var c := [Vector3(ax, y, az), Vector3(bx, y, az), Vector3(bx, y, bz), Vector3(ax, y, bz)]
+			var st := _tool("lawn")
+			for k in [0, 1, 2, 0, 2, 3]:
+				var p: Vector3 = c[k]
+				st.set_normal(Vector3.UP)
+				st.set_color(_lawn_colour(p.x, p.z))
+				st.set_uv(Vector2(p.x, p.z))
+				st.add_vertex(p)
+
+
+func _lawn_colour(x: float, z: float) -> Color:
+	var n := _lawn_noise.get_noise_2d(x, z)                  # about -1..1
+	var dry := clampf(_lawn_noise.get_noise_2d(x * 0.6 + 400.0, z * 0.6) * 1.6 + 0.2, 0.0, 1.0)
+	var lush := Color(0.82, 0.98, 0.78)
+	var parched := Color(1.08, 1.0, 0.74)
+	return lush.lerp(parched, dry) * (0.88 + 0.18 * n)
 
 
 # A vertical strip along x at z, from y0 to y1, facing +z (facing = 1) or -z (facing = -1).
