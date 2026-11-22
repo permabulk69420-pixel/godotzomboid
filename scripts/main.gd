@@ -1,6 +1,6 @@
 # The test street: you stand at one end of a generated suburban street at golden hour and can walk around it, and into any house.
 # In a headset (OpenXR, Quest) you have hands on the controllers; the left stick walks (click it in to sprint, until you let the stick
-# go) and the right stick turns; click both sticks to show the performance overlay.
+# go) and the right stick turns. A performance readout sits on your left wrist like a watch; click both sticks to hide or show it.
 # On a flat screen the camera stands where you would: WASD walks (Shift sprints), Q/E or the arrow keys turn.
 extends Node3D
 
@@ -70,8 +70,15 @@ func _ready() -> void:
 	if vr:
 		hands = VrHands.new({"left": left_controller, "right": right_controller})
 	overlay = _make_overlay()
-	overlay.visible = false
-	camera.add_child(overlay)
+	if vr:
+		# on the left wrist, facing up off the back of the hand, like a watch
+		overlay.position = Vector3(0.0, 0.03, 0.11)
+		overlay.rotation = Vector3(deg_to_rad(-70.0), 0.0, 0.0)
+		left_controller.add_child(overlay)
+	else:
+		overlay.position = Vector3(-0.35, 0.2, -0.7)
+		camera.add_child(overlay)
+	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 
 	# your body: a capsule that only looks at solid things and is moved by hand in _slide()
 	body = CharacterBody3D.new()
@@ -246,28 +253,42 @@ func _build_environment() -> void:
 static func _make_overlay() -> Label3D:
 	var label := Label3D.new()
 	label.name = "Overlay"
-	label.position = Vector3(0.0, -0.22, -0.7)
-	label.pixel_size = 0.0006
-	label.font_size = 32
-	label.outline_size = 8
+	label.pixel_size = 0.0002
+	label.font_size = 30
+	label.outline_size = 10
 	label.no_depth_test = true
 	label.render_priority = 10
-	label.modulate = Color(1.0, 1.0, 0.6)
+	label.modulate = Color(0.75, 1.0, 0.75)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	label.double_sided = false
 	return label
+
+
+var _fps_history: Array[float] = []
 
 
 func _overlay_text() -> String:
 	var lines: PackedStringArray = []
+	var fps := Engine.get_frames_per_second()
+	_fps_history.append(fps)
+	if _fps_history.size() > 20:                  # the last 10 seconds (it updates twice a second)
+		_fps_history.pop_front()
+	lines.append("FPS %d   (low %d over 10 s)" % [fps, _fps_history.min()])
 	var xr := XRServer.find_interface("OpenXR")
 	if vr and xr != null and xr.is_initialized():
+		var warp := "on" if space_warp != null else "off"
+		lines.append("Display %.0f Hz   SpaceWarp %s" % [float(xr.get("display_refresh_rate")), warp])
 		var eye := xr.get_render_target_size()
-		lines.append("Eye buffer: %d x %d per eye" % [eye.x, eye.y])
-		lines.append("Refresh: %.0f Hz" % float(xr.get("display_refresh_rate")))
-	lines.append("FPS: %d" % Engine.get_frames_per_second())
-	lines.append("Draw calls: %d" % RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME))
-	lines.append("Objects: %d" % RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME))
-	lines.append("Position: %.0f, %.0f" % [rig.global_position.x, rig.global_position.z])
+		lines.append("Eye %d x %d   foveation %d" % [eye.x, eye.y, int(xr.get("foveation_level"))])
+	var rid := get_viewport().get_viewport_rid()
+	var cpu := RenderingServer.viewport_get_measured_render_time_cpu(rid) + RenderingServer.get_frame_setup_time_cpu()
+	var gpu := RenderingServer.viewport_get_measured_render_time_gpu(rid)
+	lines.append("CPU %.1f ms  GPU %.1f ms  game %.1f ms" % [cpu, gpu, Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0])
+	lines.append("Draw calls %d   objects %d" % [
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME)])
+	lines.append("Triangles %dk" % int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME) / 1000))
+	lines.append("%s%s  at %.0f, %.0f" % ["indoors" if indoors else "outdoors", "  sprint" if sprinting else "", rig.global_position.x, rig.global_position.z])
 	return "\n".join(lines)
 
 
