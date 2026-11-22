@@ -3,7 +3,7 @@
 # Pictures are written to shots/ in the project folder.
 extends SceneTree
 
-const SETTLE_FRAMES := 20
+const SETTLE_FRAMES := 40
 
 var main: Node3D
 var camera: Camera3D
@@ -44,6 +44,8 @@ func _process(_delta: float) -> bool:
 
 
 func _place(shot: Dictionary) -> void:
+	# the player stands where the camera is too, so the game knows when you are indoors (the fog fades there)
+	main.rig.global_position = Vector3(shot.from.x, main.rig.global_position.y, shot.from.z)
 	camera.global_position = shot.from
 	camera.look_at(shot.to, Vector3.UP)
 
@@ -59,6 +61,13 @@ func _plan_shots() -> void:
 	var lots: Array = street.data.lots
 	shots.append({"name": "street_start", "from": Vector3(-70, 1.65, 1.5), "to": Vector3(-40, 1.4, 1.5)})
 	shots.append({"name": "street_middle", "from": Vector3(-10, 1.65, -2.5), "to": Vector3(10, 1.2, -8)})
+	# the wildest lot: ivy and long grass
+	for wild: Dictionary in lots:
+		if int(wild.get("overgrowth", 0)) == 2:
+			var wv: Dictionary = street.variants[int(wild.variant)]
+			var wt := Transform3D(Basis(Vector3.UP, PI if int(wild.side) > 0 else 0.0), Vector3(wild.house.x, 0.0, wild.house.z))
+			shots.append({"name": "overgrown", "from": wt * Vector3(float(wv.door_x) + 5.0, 1.65, 8.0), "to": wt * Vector3(float(wv.door_x) - 2.0, 1.2, -2.0)})
+			break
 	# the first house on the north side: from its front lawn, then inside
 	var lot: Dictionary = lots[0]
 	var house: Node3D = street.get_node(NodePath(_house_name(street, 0)))

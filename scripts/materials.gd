@@ -73,6 +73,27 @@ static func plain(colour: Color, roughness: float = 0.7, double_sided: bool = fa
 	return m
 
 
+# Leaves: clumps on cards, cut out by the texture's alpha (alpha-to-coverage smooths the edges with MSAA), seen from both sides.
+# `texture` is one of assets/foliage/*.png: leaf_cluster (trees, bushes), ivy, grass.
+static func foliage(texture: String = "leaf_cluster") -> StandardMaterial3D:
+	var key := "foliage/" + texture
+	if _cache.has(key):
+		return _cache[key]
+	var m := StandardMaterial3D.new()
+	m.resource_name = key
+	m.albedo_texture = load("res://assets/foliage/%s.png" % texture)
+	m.vertex_color_use_as_albedo = true
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	m.alpha_scissor_threshold = 0.5
+	m.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.roughness = 0.85
+	m.metallic_specular = 0.2
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	_cache[key] = m
+	return m
+
+
 static func glass() -> StandardMaterial3D:
 	if _cache.has("glass"):
 		return _cache["glass"]

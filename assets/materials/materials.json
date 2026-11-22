@@ -6,6 +6,13 @@
   ],
   "source": "https://polyhaven.com/a/asphalt_02"
  },
+ "bark": {
+  "size_m": [
+   1.0,
+   1.0
+  ],
+  "source": "https://polyhaven.com/a/bark_brown_02"
+ },
  "brick": {
   "size_m": [
    1.0,

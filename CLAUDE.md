@@ -47,10 +47,18 @@ consistency, not raw polygon counts. A locked frame rate counts as part of looki
   bath, furniture blocks, optional garage/porch, side- or front-gabled, mirrored) as `assets/houses/house_<n>.glb` +
   `houses.json`. Objects: exterior, interior (hidden beyond ~32 m), glass, collision_solid (layer 1), collision_walk (layer 2).
   The street picks a variant per lot and dresses it (siding/brick/stucco, colours) via `Materials.for_house_surface()`.
+- **Foliage:** `tools/make_foliage_textures.py` cuts real leaves out of Poly Haven's shrub_03 (CC0) and stamps them into
+  `assets/foliage/leaf_cluster.png`, `ivy.png`, plus drawn `grass.png`. `tools/make_trees.py` grows trees/bushes in Blender
+  (street_a/b, shade_a/b, dead_a, bush_a/b; bark tubes + leaf-clump cards with crown-shaped normals, ~130-3000 tris each) into
+  `assets/trees/trees.glb` + `trees.json`. Poly Haven's own tree models are millions of polys: not usable on Quest.
+  Street places trees (verges, front/back yards), bushes, ivy patches (per-lot overgrowth level 0/1/2) and grass patches/kerb weeds,
+  each kind as one MultiMesh. Foliage material: alpha scissor + alpha-to-coverage, double-sided.
+- **Fog** fades to zero when the player stands on a house floor (group `house_floor`); it hazed interiors.
 - Look: generic American suburb (GTA-like): siding, brick, stucco, shingle roofs, garages to the street, open lawns.
 
 ## Current state
 - `scripts/street.gd`: one 150 m street, textured road/kerbs/verges/footpaths/lawns (merged into one mesh per material),
   ~12+ generated houses with driveways, door paths, fences, bins, street lamps. Golden-hour sky, sun and fog in `scripts/main.gd`.
 - Player: left stick walks, right turns; the body slides along solid things and its height follows the walkable layer (steps, porches).
-- Next: tune look and performance from Kane's feedback; two-storey variants with stairs; overgrowth/foliage test; day/night decision.
+- Next: tune look and performance from Kane's feedback (foliage overdraw is the risk); more house detail and variety;
+  two-storey variants with stairs; day/night decision.

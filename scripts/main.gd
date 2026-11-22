@@ -15,6 +15,7 @@ const STEP_REACH := 0.45            # how far above your feet the floor is looke
 const STEP_DROP := 0.8              # and how far below
 const EYE_HEIGHT := 1.62            # flat-screen camera height
 const STREET_SEED := 1
+const FOG_OUTSIDE := 0.004          # fog density outdoors; it fades to nothing when you are inside a house (it hazed the rooms)
 const START := Vector3(-70.0, 0.0, 1.5)    # the west end of the street, on the road, facing east along it
 
 var vr := false
@@ -28,6 +29,8 @@ var space_warp: Object = null       # OpenXRFbSpaceWarpExtension singleton, if t
 var overlay: Label3D
 var overlay_timer := 0.0
 var overlay_combo_held := false
+var environment: Environment
+var indoors := false
 
 
 func _ready() -> void:
@@ -103,6 +106,8 @@ func _process(delta: float) -> void:
 			float(Input.is_key_pressed(KEY_W)) - float(Input.is_key_pressed(KEY_S)))
 		turn = float(Input.is_key_pressed(KEY_E) or Input.is_key_pressed(KEY_RIGHT)) - float(Input.is_key_pressed(KEY_Q) or Input.is_key_pressed(KEY_LEFT))
 	locomote(move, turn, dt)
+	var fog_target := 0.0 if indoors else FOG_OUTSIDE
+	environment.fog_density = move_toward(environment.fog_density, fog_target, FOG_OUTSIDE * dt * 1.5)
 	overlay_timer -= delta
 	if overlay.visible and overlay_timer <= 0.0:
 		overlay_timer = 0.5
@@ -143,6 +148,7 @@ func _follow_ground(dt: float) -> void:
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
 		return
+	indoors = hit.collider is Node and (hit.collider as Node).is_in_group("house_floor")
 	var ground: float = hit.position.y
 	if absf(ground - rig.global_position.y) > 0.0005:
 		rig.global_position.y = lerpf(rig.global_position.y, ground, 1.0 - exp(-14.0 * dt))
@@ -196,8 +202,9 @@ func _build_environment() -> void:
 	env.tonemap_exposure = 1.0
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.82, 0.76, 0.68)
-	env.fog_density = 0.0055
+	env.fog_density = FOG_OUTSIDE
 	env.fog_sky_affect = 0.1
+	environment = env
 	var world := WorldEnvironment.new()
 	world.name = "Environment"
 	world.environment = env

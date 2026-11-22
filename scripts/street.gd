@@ -19,6 +19,8 @@ const LOT_DEPTH := 34.0         # from the footpath back to the rear fence
 const SOLID_LAYER := 1          # things you bump into
 const WALK_LAYER := 2           # things you stand on
 const HOUSES_JSON := "res://assets/houses/houses.json"
+const TREES_JSON := "res://assets/trees/trees.json"
+const TREES_GLB := "res://assets/trees/trees.glb"
 const INTERIOR_VISIBLE := 32.0  # interiors are only drawn within this distance
 
 const SIDING_COLOURS := [Color(0.95, 0.94, 0.90), Color(0.93, 0.88, 0.72), Color(0.74, 0.80, 0.84), Color(0.72, 0.78, 0.68),
@@ -33,6 +35,7 @@ const INSIDE_COLOURS := [Color(0.95, 0.94, 0.90), Color(0.92, 0.90, 0.82), Color
 var seed_value := 1
 var data: Dictionary = {}
 var variants: Array = []
+var tree_variants: Array = []
 var _variant_scenes: Dictionary = {}
 var _ground := {}               # material key -> SurfaceTool, so each ground material is one mesh for the whole street
 
@@ -43,8 +46,17 @@ func _init(street_seed: int = 1) -> void:
 
 func _ready() -> void:
 	variants = load_variants()
-	data = layout(seed_value, variants)
+	tree_variants = load_tree_variants()
+	data = layout(seed_value, variants, tree_variants)
 	build(data)
+
+
+static func load_tree_variants() -> Array:
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(TREES_JSON))
+	if parsed is Dictionary and parsed.has("variants"):
+		return parsed["variants"]
+	push_error("Street: could not read " + TREES_JSON)
+	return []
 
 
 static func load_variants() -> Array:
@@ -58,7 +70,7 @@ static func load_variants() -> Array:
 # ---- layout: seed -> data ----------------------------------------------------------------------------------------------------------
 
 # Where everything on the street goes, as plain data. The same seed always gives the same street.
-static func layout(street_seed: int, house_variants: Array) -> Dictionary:
+static func layout(street_seed: int, house_variants: Array, plant_variants: Array = []) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = street_seed
 	var lots: Array = []
@@ -73,6 +85,7 @@ static func layout(street_seed: int, house_variants: Array) -> Dictionary:
 			var lot := _make_lot(rng, side, x, variant)
 			if lot.x1 > LENGTH * 0.5:
 				break
+			_plan_overgrowth(rng, lot, variant)
 			lots.append(lot)
 			last_variant = int(variant.id)
 			x = lot.x1
@@ -83,7 +96,162 @@ static func layout(street_seed: int, house_variants: Array) -> Dictionary:
 		lamps.append(Vector3(lamp_x, KERB_HEIGHT, lamp_side * (ROAD_HALF + VERGE * 0.5)))
 		lamp_side = -lamp_side
 		lamp_x += 26.0
-	return {"seed": street_seed, "lots": lots, "lamps": lamps}
+	var trees: Array = _plan_trees(rng, lots, lamps, house_variants) if not plant_variants.is_empty() else []
+	var grass: Array = _plan_grass(rng, lots, house_variants)
+	return {"seed": street_seed, "lots": lots, "lamps": lamps, "trees": trees, "grass": grass}
+
+
+# How overgrown each lot is (0 kept, 1 neglected, 2 wild), and the ivy patches on its house, in the house's own coordinates:
+# {wall: front/left/right, at (across the wall, from the house's middle), width, height}.
+static func _plan_overgrowth(rng: RandomNumberGenerator, lot: Dictionary, variant: Dictionary) -> void:
+	var roll := rng.randf()
+	var level := 0 if roll < 0.35 else (1 if roll < 0.8 else 2)
+	lot["overgrowth"] = level
+	var ivy: Array = []
+	var half_w := float(variant.width) * 0.5
+	var depth := float(variant.depth)
+	var door_x: float = variant.door_x
+	var garage_side := 0.0
+	if variant.garage != null:
+		garage_side = signf(float(variant.garage.door_x))
+	for k in [0, rng.randi_range(1, 3), rng.randi_range(3, 6)][level]:
+		var wall: String = ["front", "front", "left", "right"][rng.randi_range(0, 3)]
+		if (wall == "left" and garage_side < 0.0) or (wall == "right" and garage_side > 0.0):
+			wall = "front"                                     # that side wall is hidden behind the garage
+		var width := rng.randf_range(0.8, 2.2)
+		var at: float
+		if wall == "front":
+			at = rng.randf_range(-half_w + width * 0.5, half_w - width * 0.5)
+			if absf(at - door_x) < 0.6 + width * 0.5:
+				continue
+		else:
+			at = rng.randf_range(width * 0.5 + 0.3, depth - width * 0.5 - 0.3)
+		ivy.append({"wall": wall, "at": at, "width": width, "height": rng.randf_range(1.4, 2.9) if level == 1 else rng.randf_range(2.2, 2.95)})
+	lot["ivy"] = ivy
+
+
+# Clumps of long grass and weeds: thick in wild yards, a few in neglected ones, and along the kerbs and fence lines everywhere.
+static func _plan_grass(rng: RandomNumberGenerator, lots: Array, house_variants: Array) -> Array:
+	var grass: Array = []
+	var front := ROAD_HALF + PATH_WIDTH
+	var far := front + LOT_DEPTH
+	for lot: Dictionary in lots:
+		var side: int = lot.side
+		var level: int = lot.get("overgrowth", 0)
+		var house: Dictionary = lot.house
+		var variant: Dictionary = house_variants[int(lot.variant)]
+		var x0: float = lot.x0
+		var x1: float = lot.x1
+		var drive: Dictionary = lot.driveway
+		var door_x: float = float(house.x) + float(house.flip) * float(variant.door_x)
+		var wall_front := absf(float(house.z)) + float(variant.front_y)
+		var wall_back := absf(float(house.z)) + float(variant.back_y)
+		# patches of long grass: a centre, then clumps packed around it
+		var patches: int = [1, 7, 22][level]
+		for p in patches:
+			var cx := rng.randf_range(x0 + 0.5, x1 - 0.5)
+			var cd := rng.randf_range(front + 0.5, far - 0.5)
+			var radius := rng.randf_range(0.8, 2.2) * (1.0 + 0.3 * level)
+			for k in rng.randi_range(8, 18):
+				var x := cx + rng.randf_range(-radius, radius)
+				var d := cd + rng.randf_range(-radius, radius)
+				if x < x0 + 0.2 or x > x1 - 0.2 or d < front + 0.2 or d > far - 0.2:
+					continue
+				if absf(x - float(drive.x)) < float(drive.width) * 0.5 + 0.2 and d < front + float(drive.length) + 0.5:
+					continue                                     # not on the driveway
+				if absf(x - door_x) < 0.9 and d < wall_front:
+					continue                                     # not on the path
+				if x > float(house.x_min) - 0.2 and x < float(house.x_max) + 0.2 and d > wall_front - 0.2 and d < wall_back + 0.2:
+					continue                                     # not inside the house
+				var edge := 1.0 - Vector2(x - cx, d - cd).length() / (radius * 1.42)
+				grass.append({"pos": Vector3(x, 0.0, side * d), "yaw": rng.randf_range(0.0, TAU),
+					"scale": rng.randf_range(0.6, 1.0) * (0.7 + 0.6 * edge) * (1.0 + 0.2 * level)})
+		# along the fence lines
+		for k in [4, 10, 18][level]:
+			grass.append({"pos": Vector3(x0 + rng.randf_range(-0.2, 0.4), 0.0, side * rng.randf_range(wall_front, far - 0.2)), "yaw": rng.randf_range(0.0, TAU), "scale": rng.randf_range(0.7, 1.3)})
+	# weeds along the kerbs and the footpath edges, the length of the street
+	for side in [-1, 1]:
+		var x := -LENGTH * 0.5 - 40.0
+		while x < LENGTH * 0.5 + 40.0:
+			var where := rng.randf()
+			var d := ROAD_HALF + 0.22 if where < 0.4 else (ROAD_HALF + VERGE + 0.05 if where < 0.7 else front - 0.05)
+			for k in rng.randi_range(1, 4):
+				grass.append({"pos": Vector3(x + rng.randf_range(-0.4, 0.4), KERB_HEIGHT, side * (d + rng.randf_range(-0.04, 0.04))),
+					"yaw": rng.randf_range(0.0, TAU), "scale": rng.randf_range(0.3, 0.6)})
+			x += rng.randf_range(2.0, 7.0)
+	return grass
+
+
+# Trees and bushes: street trees along the verges, a tree in some front yards, one or two in every back yard, bushes along house fronts.
+# Each is {name (a variant in trees.json), pos, yaw, scale}. Kept clear of driveways, paths, lamps and houses.
+static func _plan_trees(rng: RandomNumberGenerator, lots: Array, lamps: Array, house_variants: Array) -> Array:
+	var trees: Array = []
+	var front := ROAD_HALF + PATH_WIDTH
+	var far := front + LOT_DEPTH
+	for side in [-1, 1]:
+		var x := -LENGTH * 0.5 + rng.randf_range(3.0, 8.0)
+		while x < LENGTH * 0.5:
+			if _verge_clear(x, side, lots, lamps):
+				var kind := "dead_a" if rng.randf() < 0.12 else ("street_a" if rng.randf() < 0.5 else "street_b")
+				trees.append(_tree(rng, kind, Vector3(x, KERB_HEIGHT, side * (ROAD_HALF + VERGE * 0.5 + 0.05))))
+			x += rng.randf_range(11.0, 15.0)
+	for lot: Dictionary in lots:
+		var side: int = lot.side
+		var house: Dictionary = lot.house
+		var variant: Dictionary = house_variants[int(lot.variant)]
+		var wall_front := absf(float(house.z))
+		var wall_back := wall_front + float(variant.back_y)
+		var x0: float = lot.x0
+		var x1: float = lot.x1
+		var door_x: float = float(house.x) + float(house.flip) * float(variant.door_x)
+		var drive: Dictionary = lot.driveway
+		# front yard
+		if rng.randf() < 0.55:
+			for attempt in 8:
+				var tx := rng.randf_range(x0 + 2.5, x1 - 2.5)
+				var depth := rng.randf_range(front + 2.5, wall_front - 3.5)
+				if depth < front + 2.5:
+					break
+				if absf(tx - float(drive.x)) < float(drive.width) * 0.5 + 2.5 or absf(tx - door_x) < 3.0:
+					continue
+				var kind := "shade_b" if rng.randf() < 0.3 else ("street_a" if rng.randf() < 0.5 else "street_b")
+				trees.append(_tree(rng, kind, Vector3(tx, 0.0, side * depth)))
+				break
+		# back yard
+		for k in rng.randi_range(1, 2):
+			var lo_depth := wall_back + 4.0
+			var hi_depth := far - 3.0
+			if lo_depth >= hi_depth:
+				break
+			var kind := ("shade_a" if rng.randf() < 0.5 else "shade_b") if rng.randf() < 0.6 else "street_a"
+			trees.append(_tree(rng, kind, Vector3(rng.randf_range(x0 + 3.0, x1 - 3.0), 0.0, side * rng.randf_range(lo_depth, hi_depth))))
+		# bushes along the front of the house (not the garage), clear of the door
+		var half_w := float(variant.width) * 0.5
+		var body_x := float(house.x)                     # the house origin is the middle of its main body
+		for k in rng.randi_range(2, 4):
+			var bx := rng.randf_range(body_x - half_w + 0.8, body_x + half_w - 0.8)
+			if absf(bx - door_x) < 2.4:
+				continue
+			var kind := "bush_a" if rng.randf() < 0.6 else "bush_b"
+			trees.append(_tree(rng, kind, Vector3(bx, 0.0, side * (wall_front - 1.0))))
+	return trees
+
+
+static func _tree(rng: RandomNumberGenerator, kind: String, pos: Vector3) -> Dictionary:
+	return {"name": kind, "pos": pos, "yaw": rng.randf_range(0.0, TAU), "scale": rng.randf_range(0.85, 1.15)}
+
+
+static func _verge_clear(x: float, side: int, lots: Array, lamps: Array) -> bool:
+	for lamp: Vector3 in lamps:
+		if signf(lamp.z) == float(side) and absf(lamp.x - x) < 3.5:
+			return false
+	for lot: Dictionary in lots:
+		if int(lot.side) != side:
+			continue
+		var drive: Dictionary = lot.driveway
+		if absf(x - float(drive.x)) < float(drive.width) * 0.5 + 1.5:
+			return false
+	return true
 
 
 static func _make_lot(rng: RandomNumberGenerator, side: int, x0: float, variant: Dictionary) -> Dictionary:
@@ -163,6 +331,9 @@ func build(street: Dictionary) -> void:
 	for lamp: Vector3 in street.lamps:
 		_build_lamp(lamp)
 	_finish_ground()
+	_build_trees(street.get("trees", []))
+	_build_ivy(street.lots)
+	_build_grass(street.get("grass", []))
 
 
 func _build_lot(lot: Dictionary, front: float, far: float) -> void:
@@ -218,6 +389,8 @@ func _make_house(variant: Dictionary, style: Dictionary) -> Node3D:
 		if part.begins_with("collision"):
 			var body := StaticBody3D.new()
 			body.collision_layer = WALK_LAYER if part.contains("walk") else SOLID_LAYER
+			if part.contains("walk"):
+				body.add_to_group("house_floor")      # the player uses this to tell when they are indoors
 			body.collision_mask = 0
 			var shape := CollisionShape3D.new()
 			var concave := ConcavePolygonShape3D.new()
@@ -238,6 +411,157 @@ func _make_house(variant: Dictionary, style: Dictionary) -> Node3D:
 		elif part.begins_with("glass"):
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return house
+
+
+# All the trees and bushes of one kind are one MultiMesh (one draw call per kind, per part), with a solid trunk to bump into.
+func _build_trees(trees: Array) -> void:
+	if trees.is_empty():
+		return
+	var scene: PackedScene = load(TREES_GLB)
+	var source: Node = scene.instantiate()
+	var by_name: Dictionary = {}
+	for tree: Dictionary in trees:
+		if not by_name.has(tree.name):
+			by_name[tree.name] = []
+		by_name[tree.name].append(tree)
+	for kind: String in by_name:
+		var info: Dictionary = {}
+		for v: Dictionary in tree_variants:
+			if v.name == kind:
+				info = v
+		for part in ["bark", "leaves"]:
+			var node := source.find_child(kind + "_" + part, true, false) as MeshInstance3D
+			if node == null:
+				continue
+			var mm := MultiMesh.new()
+			mm.transform_format = MultiMesh.TRANSFORM_3D
+			mm.mesh = node.mesh
+			mm.instance_count = by_name[kind].size()
+			for i in mm.instance_count:
+				var tree: Dictionary = by_name[kind][i]
+				var basis := Basis(Vector3.UP, float(tree.yaw)).scaled(Vector3.ONE * float(tree.scale))
+				mm.set_instance_transform(i, Transform3D(basis, tree.pos))
+			var mmi := MultiMeshInstance3D.new()
+			mmi.name = "Trees_%s_%s" % [kind, part]
+			mmi.multimesh = mm
+			mmi.material_override = Materials.textured("bark") if part == "bark" else Materials.foliage()
+			add_child(mmi)
+		var trunk_r: float = info.get("trunk_radius", 0.0)
+		if trunk_r > 0.0:
+			for tree: Dictionary in by_name[kind]:
+				var body := StaticBody3D.new()
+				body.collision_layer = SOLID_LAYER
+				body.collision_mask = 0
+				var shape := CollisionShape3D.new()
+				var cyl := CylinderShape3D.new()
+				cyl.radius = trunk_r * float(tree.scale)
+				cyl.height = 3.0
+				shape.shape = cyl
+				body.add_child(shape)
+				body.position = tree.pos + Vector3(0, 1.5, 0)
+				add_child(body)
+	source.free()
+
+
+# Ivy patches on the house walls: a few overlapping strips of the climbing-ivy texture each, all merged into one mesh for the street.
+func _build_ivy(lots: Array) -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var any := false
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value * 31 + 7
+	for lot: Dictionary in lots:
+		var house_data: Dictionary = lot.house
+		var variant: Dictionary = _variant(int(lot.variant))
+		var t := Transform3D(Basis(Vector3.UP, PI if int(lot.side) > 0 else 0.0), Vector3(house_data.x, 0.0, house_data.z))
+		var half_w := float(variant.width) * 0.5
+		for patch: Dictionary in lot.get("ivy", []):
+			var wall: String = patch.wall
+			var at: float = patch.at
+			var width: float = patch.width
+			var height: float = patch.height
+			# the wall's own frame (house coordinates: front wall at z = 0 facing +z, the house runs back to z = -depth)
+			var origin: Vector3
+			var across: Vector3
+			var out: Vector3
+			if wall == "front":
+				origin = Vector3(at, 0.0, 0.03)
+				across = Vector3.RIGHT
+				out = Vector3.BACK
+			elif wall == "left":
+				origin = Vector3(-half_w - 0.03, 0.0, -at)
+				across = Vector3.FORWARD
+				out = Vector3.LEFT
+			else:
+				origin = Vector3(half_w + 0.03, 0.0, -at)
+				across = Vector3.BACK
+				out = Vector3.RIGHT
+			for strip in rng.randi_range(2, 4):
+				var w := width * rng.randf_range(0.45, 0.8)
+				var h := height * rng.randf_range(0.6, 1.0)
+				var centre := origin + across * rng.randf_range(-width * 0.3, width * 0.3) + out * (0.01 * strip)
+				var lean := across * rng.randf_range(-0.25, 0.25) * h / 2.5
+				var bottom_l := centre - across * w * 0.5
+				var bottom_r := centre + across * w * 0.5
+				var top_l := bottom_l + Vector3.UP * h + lean
+				var top_r := bottom_r + Vector3.UP * h + lean
+				var v_top := -h                                    # the texture repeats every metre up the wall
+				var corners := [t * top_l, t * top_r, t * bottom_r, t * bottom_l]
+				var uvs := [Vector2(0, v_top), Vector2(1, v_top), Vector2(1, 0), Vector2(0, 0)]
+				var shades := [1.0, 1.0, 0.65, 0.65]
+				var n := t.basis * out
+				for i in [0, 1, 2, 0, 2, 3]:
+					st.set_normal(n)
+					st.set_color(Color(shades[i], shades[i], shades[i]))
+					st.set_uv(uvs[i])
+					st.add_vertex(corners[i])
+				any = true
+	if not any:
+		return
+	var mi := MeshInstance3D.new()
+	mi.name = "Ivy"
+	mi.mesh = st.commit()
+	mi.material_override = Materials.foliage("ivy")
+	add_child(mi)
+
+
+# Long grass and weeds: one MultiMesh of crossed cards for the whole street, only drawn near you.
+func _build_grass(clumps: Array) -> void:
+	if clumps.is_empty():
+		return
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = _grass_mesh()
+	mm.instance_count = clumps.size()
+	for i in clumps.size():
+		var c: Dictionary = clumps[i]
+		var basis := Basis(Vector3.UP, float(c.yaw)).scaled(Vector3.ONE * float(c.scale))
+		mm.set_instance_transform(i, Transform3D(basis, c.pos))
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "Grass"
+	mmi.multimesh = mm
+	mmi.material_override = Materials.foliage("grass")
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mmi.visibility_range_end = 70.0
+	add_child(mmi)
+
+
+static func _grass_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var size := 0.8
+	for k in 3:                                                    # three cards crossed like a star
+		var a := PI * k / 3.0
+		var d := Vector3(cos(a), 0.0, sin(a)) * size * 0.5
+		var corners := [-d + Vector3.UP * size, d + Vector3.UP * size, d, -d]
+		var uvs := [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]
+		var shades := [1.0, 1.0, 0.55, 0.55]
+		for i in [0, 1, 2, 0, 2, 3]:
+			st.set_normal(Vector3.UP)
+			st.set_color(Color(shades[i], shades[i], shades[i]))
+			st.set_uv(uvs[i])
+			st.add_vertex(corners[i])
+	return st.commit()
 
 
 func _build_lamp(base: Vector3) -> void:

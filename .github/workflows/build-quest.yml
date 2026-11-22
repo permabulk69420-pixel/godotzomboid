@@ -70,7 +70,7 @@ jobs:
           if grep -E "SCRIPT ERROR|Parse Error" import.log; then exit 1; fi
           for t in tests/*.gd; do
             echo "== $t"
-            godot --headless -s "res://$t" 2>&1 | tee test.log
+            timeout 600 godot --headless -s "res://$t" 2>&1 | tee test.log
             test ${PIPESTATUS[0]} -eq 0
             if grep -E "SCRIPT ERROR|Parse Error" test.log; then exit 1; fi
           done

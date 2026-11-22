@@ -29,6 +29,7 @@ MATERIALS = {
     "plaster": ("painted_plaster_wall", "2k", False),
     "wood_floor": ("laminate_floor_02", "2k", False),
     "tiles": ("floor_tiles_06", "2k", False),
+    "bark": ("bark_brown_02", "1k", False),
 }
 
 MAPS = {"albedo": "Diffuse", "normal": "nor_gl", "orm": "arm"}

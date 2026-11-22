@@ -14,6 +14,10 @@ func _initialize() -> void:
 
 func _process(_delta: float) -> bool:
 	frames += 1
+	if street == null or street.get_script() == null or not ("data" in street):
+		printerr("FAIL: the street could not be built (script error?)")
+		quit(1)
+		return true
 	if frames < 3:
 		return false
 	var lots: Array = street.data.get("lots", [])

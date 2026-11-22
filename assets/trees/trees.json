@@ -1,0 +1,60 @@
+{
+ "variants": [
+  {
+   "name": "street_a",
+   "kind": "street",
+   "height": 6.95,
+   "crown_radius": 4.2,
+   "trunk_radius": 0.182,
+   "triangles": 1224
+  },
+  {
+   "name": "street_b",
+   "kind": "street",
+   "height": 6.11,
+   "crown_radius": 3.18,
+   "trunk_radius": 0.169,
+   "triangles": 1540
+  },
+  {
+   "name": "shade_a",
+   "kind": "shade",
+   "height": 11.76,
+   "crown_radius": 5.55,
+   "trunk_radius": 0.39,
+   "triangles": 2552
+  },
+  {
+   "name": "shade_b",
+   "kind": "shade",
+   "height": 9.39,
+   "crown_radius": 4.84,
+   "trunk_radius": 0.338,
+   "triangles": 2510
+  },
+  {
+   "name": "dead_a",
+   "kind": "dead",
+   "height": 8.04,
+   "crown_radius": 4.07,
+   "trunk_radius": 0.26,
+   "triangles": 2980
+  },
+  {
+   "name": "bush_a",
+   "kind": "bush",
+   "height": 1.4,
+   "crown_radius": 0.75,
+   "trunk_radius": 0.0,
+   "triangles": 132
+  },
+  {
+   "name": "bush_b",
+   "kind": "bush",
+   "height": 1.9,
+   "crown_radius": 1.05,
+   "trunk_radius": 0.0,
+   "triangles": 156
+  }
+ ]
+}
