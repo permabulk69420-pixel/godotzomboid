@@ -59,6 +59,9 @@ consistency, not raw polygon counts. A locked frame rate counts as part of looki
 ## Current state
 - `scripts/street.gd`: one 150 m street, textured road/kerbs/verges/footpaths/lawns (merged into one mesh per material),
   ~12+ generated houses with driveways, door paths, fences, bins, street lamps. Golden-hour sky, sun and fog in `scripts/main.gd`.
-- Player: left stick walks, right turns; the body slides along solid things and its height follows the walkable layer (steps, porches).
+- Player: left stick walks (click it in to sprint until the stick returns to centre), right turns; the body slides along solid things
+  and its height follows the walkable layer (steps, porches). VR hands from Kane's Humansandbox repo (`scripts/vr_hands.gd`,
+  `scripts/hand_model.gd`, `assets/hands/`): grip curls, trigger pinches, both make a fist. Not testable in flat screenshots;
+  `tests/hands.gd` checks they load.
 - Next: tune look and performance from Kane's feedback (foliage overdraw is the risk); more house detail and variety;
   two-storey variants with stairs; day/night decision.
