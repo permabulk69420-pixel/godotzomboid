@@ -375,6 +375,23 @@ func _variant(id: int) -> Dictionary:
 	return variants[0]
 
 
+# Which batch a tree or grass clump is drawn in. Occlusion culling only hides a batch when the whole of it is hidden, so batches are kept
+# to areas that get hidden together: along the street in 40 m stretches (front yards included), and each lot's back yard on its own.
+func _cull_group(pos: Vector3) -> String:
+	var side := 1 if pos.z > 0.0 else -1
+	var chunk := int(floor((pos.x + LENGTH * 0.5 + 60.0) / 40.0))
+	var d := absf(pos.z)
+	if d > ROAD_HALF + PATH_WIDTH:
+		var lots: Array = data.get("lots", [])
+		for i in lots.size():
+			var lot: Dictionary = lots[i]
+			if int(lot.side) != side or pos.x < float(lot.x0) or pos.x >= float(lot.x1):
+				continue
+			if d > absf(float(lot.house.z)) - 0.5:
+				return "lot%d" % i
+	return "street%d_%d" % [side, chunk]
+
+
 # One house: the variant's scene, with its surfaces dressed in this lot's style, its interior hidden from a distance, and its
 # collision boxes turned into physics bodies.
 func _make_house(variant: Dictionary, style: Dictionary) -> Node3D:
@@ -408,9 +425,30 @@ func _make_house(variant: Dictionary, style: Dictionary) -> Node3D:
 		if part.begins_with("interior"):
 			mi.visibility_range_end = INTERIOR_VISIBLE
 			mi.visibility_range_end_margin = 2.0
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # the shell already keeps the sun out
 		elif part.begins_with("glass"):
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_add_occluder(house, variant)
 	return house
+
+
+# The house's occluder (made in tools/make_houses.py): the solid parts of its outer walls, gable ends and garage. Anything fully behind
+# it is not drawn. Window and door holes are left open, so what can be seen through them still is.
+static func _add_occluder(house: Node3D, variant: Dictionary) -> void:
+	var flat: Array = variant.get("occluder", [])
+	if flat.is_empty():
+		return
+	var verts := PackedVector3Array()
+	var indices := PackedInt32Array()
+	for i in range(0, flat.size(), 3):
+		verts.append(Vector3(flat[i], flat[i + 1], flat[i + 2]))
+		indices.append(i / 3)
+	var shape := ArrayOccluder3D.new()
+	shape.set_arrays(verts, indices)
+	var occluder := OccluderInstance3D.new()
+	occluder.name = "Occluder"
+	occluder.occluder = shape
+	house.add_child(occluder)
 
 
 # All the trees and bushes of one kind are one MultiMesh (one draw call per kind, per part), with a solid trunk to bump into.
@@ -419,11 +457,14 @@ func _build_trees(trees: Array) -> void:
 		return
 	var scene: PackedScene = load(TREES_GLB)
 	var source: Node = scene.instantiate()
-	var by_name: Dictionary = {}
+	var by_name: Dictionary = {}                  # kind -> group -> trees
 	for tree: Dictionary in trees:
 		if not by_name.has(tree.name):
-			by_name[tree.name] = []
-		by_name[tree.name].append(tree)
+			by_name[tree.name] = {}
+		var group := _cull_group(tree.pos)
+		if not by_name[tree.name].has(group):
+			by_name[tree.name][group] = []
+		by_name[tree.name][group].append(tree)
 	for kind: String in by_name:
 		var info: Dictionary = {}
 		for v: Dictionary in tree_variants:
@@ -433,22 +474,27 @@ func _build_trees(trees: Array) -> void:
 			var node := source.find_child(kind + "_" + part, true, false) as MeshInstance3D
 			if node == null:
 				continue
-			var mm := MultiMesh.new()
-			mm.transform_format = MultiMesh.TRANSFORM_3D
-			mm.mesh = node.mesh
-			mm.instance_count = by_name[kind].size()
-			for i in mm.instance_count:
-				var tree: Dictionary = by_name[kind][i]
-				var basis := Basis(Vector3.UP, float(tree.yaw)).scaled(Vector3.ONE * float(tree.scale))
-				mm.set_instance_transform(i, Transform3D(basis, tree.pos))
-			var mmi := MultiMeshInstance3D.new()
-			mmi.name = "Trees_%s_%s" % [kind, part]
-			mmi.multimesh = mm
-			mmi.material_override = Materials.textured("bark") if part == "bark" else Materials.foliage()
-			add_child(mmi)
+			for group: String in by_name[kind]:
+				var list: Array = by_name[kind][group]
+				var mm := MultiMesh.new()
+				mm.transform_format = MultiMesh.TRANSFORM_3D
+				mm.mesh = node.mesh
+				mm.instance_count = list.size()
+				for i in list.size():
+					var tree: Dictionary = list[i]
+					var basis := Basis(Vector3.UP, float(tree.yaw)).scaled(Vector3.ONE * float(tree.scale))
+					mm.set_instance_transform(i, Transform3D(basis, tree.pos))
+				var mmi := MultiMeshInstance3D.new()
+				mmi.name = "Trees_%s_%s_%s" % [kind, part, group]
+				mmi.multimesh = mm
+				mmi.material_override = Materials.textured("bark") if part == "bark" else Materials.foliage()
+				add_child(mmi)
 		var trunk_r: float = info.get("trunk_radius", 0.0)
 		if trunk_r > 0.0:
-			for tree: Dictionary in by_name[kind]:
+			var all_of_kind: Array = []
+			for group: String in by_name[kind]:
+				all_of_kind.append_array(by_name[kind][group])
+			for tree: Dictionary in all_of_kind:
 				var body := StaticBody3D.new()
 				body.collision_layer = SOLID_LAYER
 				body.collision_mask = 0
@@ -465,12 +511,13 @@ func _build_trees(trees: Array) -> void:
 
 # Ivy patches on the house walls: a few overlapping strips of the climbing-ivy texture each, all merged into one mesh for the street.
 func _build_ivy(lots: Array) -> void:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var any := false
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value * 31 + 7
-	for lot: Dictionary in lots:
+	for lot_index in lots.size():
+		var lot: Dictionary = lots[lot_index]
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var any := false
 		var house_data: Dictionary = lot.house
 		var variant: Dictionary = _variant(int(lot.variant))
 		var t := Transform3D(Basis(Vector3.UP, PI if int(lot.side) > 0 else 0.0), Vector3(house_data.x, 0.0, house_data.z))
@@ -516,34 +563,42 @@ func _build_ivy(lots: Array) -> void:
 					st.set_uv(uvs[i])
 					st.add_vertex(corners[i])
 				any = true
-	if not any:
-		return
-	var mi := MeshInstance3D.new()
-	mi.name = "Ivy"
-	mi.mesh = st.commit()
-	mi.material_override = Materials.foliage("ivy")
-	add_child(mi)
+		if not any:
+			continue
+		var mi := MeshInstance3D.new()                      # one mesh per house, so it is hidden along with the house
+		mi.name = "Ivy%d" % lot_index
+		mi.mesh = st.commit()
+		mi.material_override = Materials.foliage("ivy")
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
 
 
 # Long grass and weeds: one MultiMesh of crossed cards for the whole street, only drawn near you.
 func _build_grass(clumps: Array) -> void:
-	if clumps.is_empty():
-		return
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = _grass_mesh()
-	mm.instance_count = clumps.size()
-	for i in clumps.size():
-		var c: Dictionary = clumps[i]
-		var basis := Basis(Vector3.UP, float(c.yaw)).scaled(Vector3.ONE * float(c.scale))
-		mm.set_instance_transform(i, Transform3D(basis, c.pos))
-	var mmi := MultiMeshInstance3D.new()
-	mmi.name = "Grass"
-	mmi.multimesh = mm
-	mmi.material_override = Materials.foliage("grass")
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mmi.visibility_range_end = 70.0
-	add_child(mmi)
+	var groups: Dictionary = {}
+	for c: Dictionary in clumps:
+		var group := _cull_group(c.pos)
+		if not groups.has(group):
+			groups[group] = []
+		groups[group].append(c)
+	var mesh := _grass_mesh()
+	for group: String in groups:
+		var list: Array = groups[group]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = list.size()
+		for i in list.size():
+			var c: Dictionary = list[i]
+			var basis := Basis(Vector3.UP, float(c.yaw)).scaled(Vector3.ONE * float(c.scale))
+			mm.set_instance_transform(i, Transform3D(basis, c.pos))
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = "Grass_" + group
+		mmi.multimesh = mm
+		mmi.material_override = Materials.foliage("grass")
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mmi.visibility_range_end = 70.0
+		add_child(mmi)
 
 
 static func _grass_mesh() -> ArrayMesh:
@@ -588,6 +643,16 @@ func _fence(a: Vector3, b: Vector3) -> void:
 	body.add_child(shape)
 	body.position = (lo + hi) * 0.5
 	add_child(body)
+	# the fence blocks the view too: a 1.8 m panel along its middle
+	var quad := QuadOccluder3D.new()
+	var along_x := (hi.x - lo.x) > (hi.z - lo.z)
+	quad.size = Vector2((hi.x - lo.x) if along_x else (hi.z - lo.z), 1.8)
+	var occluder := OccluderInstance3D.new()
+	occluder.occluder = quad
+	occluder.position = Vector3((lo.x + hi.x) * 0.5, 0.9, (lo.z + hi.z) * 0.5)
+	if not along_x:
+		occluder.rotation.y = PI * 0.5
+	add_child(occluder)
 
 
 func _bin(at: Vector3) -> void:
@@ -724,6 +789,7 @@ func _box(node_name: String, center: Vector3, size: Vector3, material: Material)
 	instance.mesh = _box_meshes[key]
 	instance.material_override = material
 	instance.position = center
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # lamps and bins: too small to be worth a shadow pass
 	add_child(instance)
 	return instance
 

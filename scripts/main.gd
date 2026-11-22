@@ -5,7 +5,7 @@
 extends Node3D
 
 const REFRESH_RATE := 72.0          # SpaceWarp needs a display rate it can evenly halve (72 Hz display / 36 fps render)
-const RENDER_SCALE := 1.5           # headset render resolution as a multiple of the Quest's recommended size, per eye
+const RENDER_SCALE := 1.0           # headset render resolution as a multiple of the Quest's recommended size, per eye
 const MOVE_SPEED := 1.6             # m/s walking
 const SPRINT_SPEED := 3.6           # m/s sprinting
 const TURN_SPEED := deg_to_rad(110.0)
@@ -35,6 +35,7 @@ var hands: VrHands
 var sprinting := false
 var sprint_click_held := false
 var sprint_moved := false
+var occlusion_button_held := false
 var environment: Environment
 var indoors := false
 
@@ -127,6 +128,11 @@ func _process(delta: float) -> void:
 		elif move.length() < 0.1 and sprint_moved:
 			sprinting = false                 # the stick came back to the middle after running
 		hands.update(dt)
+		# B (right controller) switches occlusion culling on and off, to compare on the wrist readout
+		var b := right_controller.is_button_pressed("by_button")
+		if b and not occlusion_button_held:
+			get_viewport().use_occlusion_culling = not get_viewport().use_occlusion_culling
+		occlusion_button_held = b
 	else:
 		move = Vector2(float(Input.is_key_pressed(KEY_D)) - float(Input.is_key_pressed(KEY_A)),
 			float(Input.is_key_pressed(KEY_W)) - float(Input.is_key_pressed(KEY_S)))
@@ -287,7 +293,8 @@ func _overlay_text() -> String:
 	lines.append("Draw calls %d   objects %d" % [
 		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
 		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME)])
-	lines.append("Triangles %dk" % int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME) / 1000))
+	lines.append("Triangles %dk   occlusion %s (B)" % [int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME) / 1000),
+		"on" if get_viewport().use_occlusion_culling else "off"])
 	lines.append("%s%s  at %.0f, %.0f" % ["indoors" if indoors else "outdoors", "  sprint" if sprinting else "", rig.global_position.x, rig.global_position.z])
 	return "\n".join(lines)
 

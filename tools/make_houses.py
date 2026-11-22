@@ -405,6 +405,29 @@ def make_house(index):
     # roof over the house
     ridge_z = gable_roof(ext, -W / 2, W / 2, 0.0, D, TOP, ridge)
 
+    # Occluders for the game's occlusion culling: the solid parts of the outer walls (window and door holes left open, so whatever
+    # can be seen through them still is), and the gable ends. Triangles in this file's coordinates.
+    occ = []
+
+    def occ_rect(along, c, a0, a1, z0, z1):
+        if along == "x":
+            pts = [(a0, c, z0), (a1, c, z0), (a1, c, z1), (a0, c, z1)]
+        else:
+            pts = [(c, a0, z0), (c, a1, z0), (c, a1, z1), (c, a0, z1)]
+        occ.append([pts[0], pts[1], pts[2]])
+        occ.append([pts[0], pts[2], pts[3]])
+
+    for along, c, a0, a1, openings in (("x", 0.0, -W / 2, W / 2, front_open), ("x", D, -W / 2, W / 2, back_open),
+                                       ("y", -W / 2, 0.0, D, left_open), ("y", W / 2, 0.0, D, right_open)):
+        for r in openings_panels(a0, a1, 0.0, TOP, openings):
+            occ_rect(along, c, *r)
+    if ridge == "x":
+        for x in (-W / 2, W / 2):
+            occ.append([(x, 0.0, TOP), (x, D, TOP), (x, D / 2, ridge_z)])
+    else:
+        for y in (0.0, D):
+            occ.append([(-W / 2, y, TOP), (W / 2, y, TOP), (0.0, y, ridge_z)])
+
     # garage, attached on the right (+x) side, set back a little
     garage_info = None
     if garage:
@@ -430,6 +453,11 @@ def make_house(index):
         ext.flat_rect("+z", 0.03, dx0, dx1, gy0, gy0 + 0.1, "porch")
         gable_roof(ext, gx0, gx1, gy0, gy1, gtop, "y", oh_span=(0.03, OVERHANG))
         solid.add((gx0, gy0, 0), (gx1, gy1, gtop))
+        # the garage is a closed box: all four walls occlude (the door is shut)
+        occ_rect("x", gy0, gx0, gx1, 0.0, gtop)
+        occ_rect("x", gy1, gx0, gx1, 0.0, gtop)
+        occ_rect("y", gx1, gy0, gy1, 0.0, gtop)
+        occ_rect("y", gx0, gy0, gy1, 0.0, gtop)
         garage_info = {"door_x": (gx0 + gx1) / 2, "door_width": door_w, "front_y": gy0}
 
     # furniture
@@ -455,11 +483,14 @@ def make_house(index):
     if mirror:
         for p in parts + [solid_part, walk_part]:
             p.mirror_x()
+        occ = [[(-x, y, z) for (x, y, z) in reversed(tri)] for tri in occ]
         info["min_x"], info["max_x"] = -info["max_x"], -info["min_x"]
         info["door_x"] = -info["door_x"]
         if garage_info:
             garage_info["door_x"] = -garage_info["door_x"]
     info["mirrored"] = mirror
+    # occluder triangles in Godot's coordinates (x, up, -y): a flat list of x, y, z per corner, three corners per triangle
+    info["occluder"] = [round(v, 3) for tri in occ for (x, y, z) in tri for v in (x, z, -y)]
     for k in ("min_x", "max_x", "door_x"):
         info[k] = round(info[k], 3)
     if garage_info:
