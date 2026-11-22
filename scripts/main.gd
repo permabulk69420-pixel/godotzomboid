@@ -1,11 +1,13 @@
 # The test street: you stand at one end of a generated suburban street at golden hour and can walk around it, and into any house.
-# In a headset (OpenXR, Quest) the left stick walks and the right stick turns; click both sticks to show the performance overlay.
-# On a flat screen the camera stands where you would: WASD walks, Q/E or the arrow keys turn.
+# In a headset (OpenXR, Quest) you have hands on the controllers; the left stick walks (click it in to sprint, until you let the stick
+# go) and the right stick turns; click both sticks to show the performance overlay.
+# On a flat screen the camera stands where you would: WASD walks (Shift sprints), Q/E or the arrow keys turn.
 extends Node3D
 
 const REFRESH_RATE := 72.0          # SpaceWarp needs a display rate it can evenly halve (72 Hz display / 36 fps render)
 const RENDER_SCALE := 1.5           # headset render resolution as a multiple of the Quest's recommended size, per eye
 const MOVE_SPEED := 1.6             # m/s walking
+const SPRINT_SPEED := 3.6           # m/s sprinting
 const TURN_SPEED := deg_to_rad(110.0)
 const STICK_DEADZONE := 0.2
 const BODY_RADIUS := 0.28           # your body, for bumping into houses, fences and bins
@@ -29,6 +31,10 @@ var space_warp: Object = null       # OpenXRFbSpaceWarpExtension singleton, if t
 var overlay: Label3D
 var overlay_timer := 0.0
 var overlay_combo_held := false
+var hands: VrHands
+var sprinting := false
+var sprint_click_held := false
+var sprint_moved := false
 var environment: Environment
 var indoors := false
 
@@ -61,6 +67,8 @@ func _ready() -> void:
 	camera.far = 400.0
 	camera.current = true
 	rig.add_child(camera)
+	if vr:
+		hands = VrHands.new({"left": left_controller, "right": right_controller})
 	overlay = _make_overlay()
 	overlay.visible = false
 	camera.add_child(overlay)
@@ -101,10 +109,22 @@ func _process(delta: float) -> void:
 		overlay_combo_held = both_sticks_clicked
 		move = stick_value(left_controller.get_vector2("primary"))
 		turn = stick_value(right_controller.get_vector2("primary")).x
+		# sprint: click the left stick in; it lasts until you let the stick go back to the middle
+		var clicked := left_controller.is_button_pressed("primary_click")
+		if clicked and not sprint_click_held and not both_sticks_clicked:
+			sprinting = true
+			sprint_moved = false
+		sprint_click_held = clicked
+		if move.length() > 0.3:
+			sprint_moved = true
+		elif move.length() < 0.1 and sprint_moved:
+			sprinting = false                 # the stick came back to the middle after running
+		hands.update(dt)
 	else:
 		move = Vector2(float(Input.is_key_pressed(KEY_D)) - float(Input.is_key_pressed(KEY_A)),
 			float(Input.is_key_pressed(KEY_W)) - float(Input.is_key_pressed(KEY_S)))
 		turn = float(Input.is_key_pressed(KEY_E) or Input.is_key_pressed(KEY_RIGHT)) - float(Input.is_key_pressed(KEY_Q) or Input.is_key_pressed(KEY_LEFT))
+		sprinting = Input.is_key_pressed(KEY_SHIFT)
 	locomote(move, turn, dt)
 	var fog_target := 0.0 if indoors else FOG_OUTSIDE
 	environment.fog_density = move_toward(environment.fog_density, fog_target, FOG_OUTSIDE * dt * 1.5)
@@ -137,7 +157,7 @@ func locomote(move: Vector2, turn: float, dt: float) -> void:
 		var right := camera.global_basis.x
 		right.y = 0.0
 		var heading := (forward.normalized() * move.y + right.normalized() * move.x) if forward.length() > 0.01 else Vector3.ZERO
-		rig.global_position += _slide(heading * MOVE_SPEED * dt)
+		rig.global_position += _slide(heading * (SPRINT_SPEED if sprinting else MOVE_SPEED) * dt)
 	_follow_ground(dt)
 
 
